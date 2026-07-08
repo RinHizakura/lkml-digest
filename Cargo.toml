@@ -1,0 +1,20 @@
+[package]
+name = "lkml-digest"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0"
+description = "Dump filtered mails from a local lore.kernel.org mirror as plain text for downstream summarization."
+
+[[bin]]
+name = "lkml-digest"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+clap = { version = "4", features = ["derive"] }
+lkml-core = { path = "vendor/lkml-core" }
+
+[profile.release]
+lto = "thin"
+opt-level = 3
