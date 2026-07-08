@@ -5,16 +5,6 @@ plain text, designed to be piped into an AI summarizer
 (e.g. Claude Code) for daily/weekly digests of
 "what's hot on this list".
 
-It reuses the same local public-inbox mirror as
-[`lkml-reader`](../lkml-reader/README.md): on every invocation
-it fetches the manifest, ensures the latest epoch is cloned,
-runs `git remote update`, then walks the commits within the
-requested window. If the window reaches back before the oldest
-mail in the latest epoch, it clones earlier epochs one at a time
-(`epoch - 1`, `epoch - 2`, …) until the window is covered or the
-list's first epoch is reached — so a wide `--since` is no longer
-capped at a single quarter.
-
 ## Build & run
 
 ```sh
@@ -136,5 +126,3 @@ or `--select-msgid` for the `Message-ID:` values:
 - If even the list's first epoch starts after the window, the uncovered tail is
   simply unavailable (off lore); the CLI prints a `warning:` and returns what it has.
 - Network is required on every run (manifest fetch + `git remote update`).
-- The cache directory is identical to the one `lkml-reader` uses; running
-  one tool keeps the other up to date.
