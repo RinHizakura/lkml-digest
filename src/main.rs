@@ -30,7 +30,12 @@ enum Format {
     about = "Dump filtered mails from a local lore.kernel.org mirror as plain text."
 )]
 struct Args {
-    #[arg(short, long, default_value = "lkml", help = "Mailing list name (e.g. lkml, linux-pm).")]
+    #[arg(
+        short,
+        long,
+        default_value = "lkml",
+        help = "Mailing list name (e.g. lkml, linux-pm)."
+    )]
     list: String,
 
     #[arg(
@@ -128,18 +133,54 @@ fn header_line(args: &Args, epochs: &[u32], window: &str, count: usize) -> Strin
     )
 }
 
+/// How many mails one git process reads. Reading a mail costs a git process far
+/// more than it costs to read the blob, so mails are read in batches; chunked
+/// rather than all at once so a wide window's raw text is not all held together.
+const READ_CHUNK: usize = 256;
+
 /// Fetch a mail by commit id, trying each mirrored epoch in turn. Commit ids
 /// are scoped to one epoch's repo and the CLI only carries the bare id, so a
 /// `--select-commit` may live in any epoch the window now spans.
 fn fetch_commit_any(list: &str, epochs: &[u32], commit: &str) -> Result<Mail> {
+    let want = [commit.to_string()];
     let mut last_err = None;
     for &epoch in epochs {
-        match mail::fetch(list, epoch, commit) {
-            Ok(m) => return Ok(m),
+        // An epoch that simply does not hold this commit reads as no mails, not
+        // as an error; only a mirror that will not be read at all is an error.
+        match mail::fetch(list, epoch, &want) {
+            Ok(mails) => {
+                if let Some(mail) = mails.into_iter().next() {
+                    return Ok(mail);
+                }
+            }
             Err(e) => last_err = Some(e),
         }
     }
-    Err(last_err.unwrap_or_else(|| anyhow!("no epochs to search for commit {commit}")))
+    Err(last_err
+        .unwrap_or_else(|| anyhow!("commit {commit} is not in any mirrored epoch of the window")))
+}
+
+/// Every mail of the window across `epochs`, read in batches. Both ways of
+/// picking mails — the whole window, or the ids selected out of it — walk the
+/// same commits and differ only in what they keep, so they share the read.
+fn read_window(list: &str, epochs: &[u32], range: &DateRange) -> Result<Vec<Mail>> {
+    let mut mails = Vec::new();
+    for &epoch in epochs {
+        let commits = listall_commits(list, epoch, range)?;
+        for chunk in commits.chunks(READ_CHUNK) {
+            let read = mail::fetch(list, epoch, chunk)?;
+            // A mail that will not read is dropped from the batch rather than
+            // failing it; say how many, since the digest is then incomplete.
+            if read.len() < chunk.len() {
+                eprintln!(
+                    "warning: {} mail(s) in epoch {epoch} could not be read",
+                    chunk.len() - read.len()
+                );
+            }
+            mails.extend(read);
+        }
+    }
+    Ok(mails)
 }
 
 /// The window rendered in UTC, matching the per-mail `Date:` lines so a reader
@@ -177,9 +218,11 @@ fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> R
                     writeln!(out, "To: {}", m.to)?;
                 }
                 match m.date {
-                    Some(d) => {
-                        writeln!(out, "Date: {} UTC", d.with_timezone(&Utc).format("%Y/%m/%d %H:%M"))?
-                    }
+                    Some(d) => writeln!(
+                        out,
+                        "Date: {} UTC",
+                        d.with_timezone(&Utc).format("%Y/%m/%d %H:%M")
+                    )?,
                     None => writeln!(out, "Date: -")?,
                 }
                 writeln!(out, "Replies: {}", replies[i])?;
@@ -221,19 +264,10 @@ fn select_by_msgid(
         return Ok(Vec::new());
     }
     let filters: Vec<MsgidFilter> = msgids.iter().map(|m| MsgidFilter::new(m)).collect();
-    let mut mails: Vec<Mail> = Vec::new();
-    for &epoch in epochs {
-        for commit in listall_commits(list, epoch, range)? {
-            match mail::fetch(list, epoch, &commit) {
-                Ok(m) => {
-                    if date.matches(&m) && filters.iter().any(|f| f.matches(&m)) {
-                        mails.push(m);
-                    }
-                }
-                Err(e) => eprintln!("warning: commit {commit}: {e:#}"),
-            }
-        }
-    }
+    let mails: Vec<Mail> = read_window(list, epochs, range)?
+        .into_iter()
+        .filter(|m| date.matches(m) && filters.iter().any(|f| f.matches(m)))
+        .collect();
     for (sel, filter) in msgids.iter().zip(&filters) {
         if !mails.iter().any(|m| filter.matches(m)) {
             eprintln!("warning: message-id {sel}: not found in local mirror window");
@@ -280,20 +314,10 @@ fn run() -> Result<()> {
     let mut mails: Vec<Mail> = if !any_selected {
         // No selection: list the whole window across every spanned epoch and
         // keep the in-window mails.
-        let mut mails = Vec::new();
-        for &epoch in &epochs {
-            for commit in listall_commits(&args.list, epoch, &range)? {
-                match mail::fetch(&args.list, epoch, &commit) {
-                    Ok(m) => {
-                        if filter.matches(&m) {
-                            mails.push(m);
-                        }
-                    }
-                    Err(e) => eprintln!("warning: commit {commit}: {e:#}"),
-                }
-            }
-        }
-        mails
+        read_window(&args.list, &epochs, &range)?
+            .into_iter()
+            .filter(|m| filter.matches(m))
+            .collect()
     } else {
         // Selection: build a mail vector from each source, concatenate, dedup.
         // Commit ids resolve directly; Message-IDs are matched while walking the
