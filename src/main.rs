@@ -146,11 +146,6 @@ fn header_line(args: &Args, epochs: &[u32], window: &str, count: usize) -> Strin
     )
 }
 
-/// How many mails one git process reads. Reading a mail costs a git process far
-/// more than it costs to read the blob, so mails are read in batches; chunked
-/// rather than all at once so a wide window's raw text is not all held together.
-const READ_CHUNK: usize = 256;
-
 /// Fetch a mail by commit id, trying each mirrored epoch in turn. Commit ids
 /// are scoped to one epoch's repo and the CLI only carries the bare id, so a
 /// `--select-commit` may live in any epoch the window now spans.
@@ -173,24 +168,22 @@ fn fetch_commit_any(list: &str, epochs: &[u32], commit: &str) -> Result<Mail> {
         .unwrap_or_else(|| anyhow!("commit {commit} is not in any mirrored epoch of the window")))
 }
 
-/// Every mail of the window across `epochs`, read in batches. Both ways of
-/// picking mails — the whole window, or the ids selected out of it — walk the
-/// same commits and differ only in what they keep, so they share the read.
+/// Every mail of the window across `epochs`. Both ways of picking mails — the
+/// whole window, or the ids selected out of it — walk the same commits and
+/// differ only in what they keep, so they share the read.
 fn read_window(list: &str, epochs: &[u32], range: &DateRange) -> Result<Vec<Mail>> {
     let mut mails = Vec::new();
     for &epoch in epochs {
         let commits = listall_commits(list, epoch, range)?;
-        for chunk in commits.chunks(READ_CHUNK) {
-            let read = mail::fetch(list, epoch, chunk)?;
-            // A mail that will not read is dropped from the batch rather than
-            // failing it; say how many, since the digest is then incomplete.
-            if read.len() < chunk.len() {
-                eprintln!(
-                    "warning: {} mail(s) in epoch {epoch} could not be read",
-                    chunk.len() - read.len()
-                );
-            }
-            mails.extend(read);
+        let mut read = mail::read(list, epoch, &commits);
+        mails.extend(&mut read);
+        // Unreadable mails are dropped, not fatal; say how many, since the
+        // digest is then incomplete.
+        if read.skipped > 0 {
+            eprintln!(
+                "warning: {} mail(s) in epoch {epoch} could not be read",
+                read.skipped
+            );
         }
     }
     Ok(mails)
