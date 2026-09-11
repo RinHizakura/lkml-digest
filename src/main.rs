@@ -303,7 +303,11 @@ fn run() -> Result<()> {
     let window = window_utc(&range);
 
     eprintln!("Updating mirror for '{}'…", args.list);
-    let epochs = archive::ensure_epoch_by_time(&args.list, range.start)?;
+    let mirror = archive::Mirror::open(&args.list)?;
+    let epochs = mirror.epochs_covering(range.start, &mut |epoch| {
+        eprintln!("Fetching earlier epoch {epoch} for '{}'…", args.list);
+        Ok(true)
+    })?;
 
     // If even the earliest mirrored epoch begins after the window start, the
     // tail of the window predates anything lore still carries — say so once
