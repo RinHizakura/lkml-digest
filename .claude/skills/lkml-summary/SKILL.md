@@ -87,11 +87,11 @@ results" are usually in the `[PATCH 0/N]` cover letter or in a reply**, and the
    ```sh
    ./target/release/lkml-digest --list <LIST> --since <WINDOW> --format compact
    ```
-2. **Match the thread.** Take the target's base subject — strip a leading `Re:`
-   and the `[PATCH vN M/K]` tag down to the series title — and collect every
-   record whose subject shares that base (the cover letter `0/N`, the other
-   `M/N` patches, and `Re:` review replies). `Replies:` on the root shows how
-   hot it is.
+2. **Match the thread.** Every compact record carries `Thread: <root msgid>`,
+   the Message-ID of the thread it hangs off. Take the target's `Thread:` value
+   and collect every record with the same one — that is the cover letter
+   `0/N`, the other `M/N` patches, and the `Re:` review replies, without
+   parsing subjects. `Replies:` on the root shows how hot it is.
 3. **Pull those bodies in one call** by their `Commit:` ids:
    ```sh
    ./target/release/lkml-digest --list <LIST> --since <WINDOW> \
