@@ -34,6 +34,10 @@ lkml-digest [OPTIONS]
                          'today' | 'yesterday' | 'YYYY/MM/DD HH:MM to YYYY/MM/DD HH:MM'
       --limit <LIMIT>    Cap matching mails (0 = no cap, default: 0)
       --format <FORMAT>  'full' (mail bodies, default) or 'compact' (metadata only)
+      --no-diff          In 'full' output, cut each body at its first 'diff --git' line
+      --exclude-from <SUBSTRS>
+                         Drop window mails whose From contains any of these
+                         (case-insensitive, comma-separated); ignored for --select-*
       --select-commit <IDS>
                          Pick mails by commit id (comma-separated, repeatable)
       --select-msgid <IDS>
@@ -89,10 +93,14 @@ To: …
 Date: …
 Replies: …
 Message-ID: …
+Thread: …
 Commit: …
 
 Subject: …
 ```
+
+`Thread:` is the root Message-ID of the thread the mail belongs to (its own
+`Message-ID` when it is the root), so grouping records by it rebuilds threads.
 
 `Replies:` is the number of mails in the window that reply to this one
 transitively (its thread-subtree size minus itself), so a cover letter / thread

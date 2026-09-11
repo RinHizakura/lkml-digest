@@ -9,7 +9,7 @@ use chrono::{Duration, Utc};
 use clap::{Parser, ValueEnum};
 
 use lkml_core::archive;
-use lkml_core::filter::{DateFilter, DateRange, Filter, MsgidFilter};
+use lkml_core::filter::{DateFilter, DateRange, Filter, MsgidFilter, NameFilter};
 use lkml_core::mail::{self, Mail};
 use lkml_core::thread;
 
@@ -61,6 +61,19 @@ struct Args {
         help = "Output format: 'full' mail bodies, or 'compact' metadata for filtering."
     )]
     format: Format,
+
+    #[arg(
+        long = "no-diff",
+        help = "In 'full' output, cut each body at its first 'diff --git' line (keeps cover letters and discussion, drops hunks)."
+    )]
+    no_diff: bool,
+
+    #[arg(
+        long = "exclude-from",
+        value_delimiter = ',',
+        help = "Drop window mails whose From contains any of these (case-insensitive, comma-separated), e.g. syzbot,lkp@intel.com. Ignored for --select-*."
+    )]
+    exclude_from: Vec<String>,
 
     #[arg(
         long = "select-commit",
@@ -204,7 +217,15 @@ fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> R
                 if i > 0 {
                     writeln!(out, "\n========\n")?;
                 }
-                out.write_all(m.render_full().as_bytes())?;
+                let mut text = m.render_full();
+                if args.no_diff {
+                    // Quoted diffs in replies start with "> " and don't match.
+                    if let Some(at) = text.find("\ndiff --git ") {
+                        text.truncate(at + 1);
+                        text.push_str("[diff omitted by --no-diff]\n");
+                    }
+                }
+                out.write_all(text.as_bytes())?;
             }
         }
         Format::Compact => {
@@ -227,6 +248,7 @@ fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> R
                 }
                 writeln!(out, "Replies: {}", replies[i])?;
                 writeln!(out, "Message-ID: {}", m.message_id)?;
+                writeln!(out, "Thread: <{}>", thread::thread_root(m))?;
                 writeln!(out, "Commit: {}", m.commit)?;
             }
         }
@@ -314,9 +336,17 @@ fn run() -> Result<()> {
     let mut mails: Vec<Mail> = if !any_selected {
         // No selection: list the whole window across every spanned epoch and
         // keep the in-window mails.
+        let excludes: Vec<NameFilter> = clean_selects(&args.exclude_from)
+            .iter()
+            .map(|s| {
+                let mut f = NameFilter::author();
+                f.set(s);
+                f
+            })
+            .collect();
         read_window(&args.list, &epochs, &range)?
             .into_iter()
-            .filter(|m| filter.matches(m))
+            .filter(|m| filter.matches(m) && !excludes.iter().any(|x| x.matches(m)))
             .collect()
     } else {
         // Selection: build a mail vector from each source, concatenate, dedup.

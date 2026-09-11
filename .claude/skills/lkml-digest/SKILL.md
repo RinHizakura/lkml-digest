@@ -59,15 +59,22 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
 3. **Phase 1 — compact scan** (metadata only, no bodies):
 
    ```sh
-   ./target/release/lkml-digest --list <LIST> --since <WINDOW> --format compact
+   ./target/release/lkml-digest --list <LIST> --since <WINDOW> --format compact \
+       --exclude-from syzbot,lkp@intel.com
    ```
 
    Output is a `# … count=N` header, then blank-line-separated records of
-   `Subject / From / To / Date / Replies / Message-ID / Commit`. `Replies` =
-   transitive in-window reply count for that subtree.
+   `Subject / From / To / Date / Replies / Message-ID / Thread / Commit`.
+   `Replies` = transitive in-window reply count for that subtree. `Thread` =
+   the root Message-ID of the thread this mail belongs to (equals its own
+   `Message-ID` when the mail is itself the root). `--exclude-from` drops bot
+   senders at the source; leave it off when a bot report *is* the story.
 
-4. **Rank & bucket.** Reconstruct threads from `Subject:` (`[PATCH vN M/K]`,
-   `Re:`) and `Replies:`. Score by subject keywords, reply volume (**>5** = hot),
+4. **Rank & bucket.** Group records by `Thread:` — every mail of a series or
+   discussion shares one root id, so don't parse `Subject:` for `Re:` /
+   `[PATCH vN M/K]` to rebuild threads. A `Thread:` whose root isn't in the
+   window means the discussion started earlier; treat the oldest in-window
+   record as its head. Score by subject keywords, reply volume (**>5** = hot),
    and notable maintainers in `From:` (Torvalds, Greg KH, akpm, Peter Zijlstra,
    tglx, Kicinski, Rafael, …). Drop bot traffic (syzbot, test robot) unless it's
    the story. Then spread picks across these buckets for breadth — don't let one
@@ -88,17 +95,21 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    DT patch; a `usb:` core fix over SoC phy glue). Skip a bucket only if truly
    empty — note the omission.
 
-5. **Phase 2 — fetch picks in full.** Collect the chosen `Commit:` ids and pull
-   their bodies in one call, **same window**:
+5. **Phase 2 — fetch picks in full.** Per thread, pick the cover letter
+   (`0/N`) or root plus the replies with `Replies > 0` or from a maintainer;
+   skip numbered `n/N` patch bodies unless the discussion is about one. Pull
+   the chosen `Commit:` ids in one call, **same window**, with `--no-diff` so
+   patch mails stop at their first `diff --git` line:
 
    ```sh
-   ./target/release/lkml-digest --list <LIST> --since <WINDOW> \
+   ./target/release/lkml-digest --list <LIST> --since <WINDOW> --no-diff \
        --select-commit <commit1>,<commit2>,…
    ```
 
    (Use `--select-msgid <id1>,<id2>,…` instead when picking by `Message-ID:`.)
 
-   Prints `========`-separated blocks (headers, blank line, `--`, decoded body).
+   Prints `========`-separated blocks (headers, blank line, `--`, decoded body;
+   `[diff omitted by --no-diff]` where hunks were cut).
 
 6. **Summarize** by bucket with the language template below. Headings and prose
    in the chosen language; technical identifiers (functions, hashes, subjects,
@@ -109,7 +120,7 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    ```
    # Linux Kernel Mailing List Daily Digest — <YYYY-MM-DD>
 
-   > Window: <start> — <end> (UTC+8) · list: <list> · <N> mails
+   > Window: <start> — <end> UTC · list: <list> · <N> mails
 
    ## 🔴 Today's Highlights
    3–5 sentences on the day's most notable discussions or technical trends.
@@ -117,6 +128,7 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    ## <Subsystem>
 
    ### <original English subject>
+   <https://lore.kernel.org/<list>/<thread root Message-ID without brackets>/>
    - **Importance**: 🔴 High / 🟡 Medium / 🟢 Low
    - **Topic**: 1–2 sentences on what's being discussed.
    - **Progress**: patch state, point of contention, or conclusion.
@@ -128,7 +140,7 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    ```
    # Linux Kernel Mailing List 每日摘要 — <YYYY-MM-DD>
 
-   > 涵蓋時間：<起始> — <結束>（UTC+8）· 來源：<list> · <N> 封信
+   > 涵蓋時間：<起始> — <結束> UTC · 來源：<list> · <N> 封信
 
    ## 🔴 今日亮點
    3–5 句話，說明當天最值得關注的討論或技術趨勢。
@@ -136,11 +148,15 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    ## <子系統 / List 名稱>
 
    ### <英文 subject 原文>
+   <https://lore.kernel.org/<list>/<thread root Message-ID without brackets>/>
    - **重要性**：🔴 高 / 🟡 中 / 🟢 低
    - **核心議題**：（1–2 句，說明在討論什麼問題）
    - **進展**：（patch 狀態、爭議點、或結論）
    - **主要參與者**：A、B、C
    ```
+
+   Times are printed as the CLI gives them (UTC); don't convert. The link
+   uses the `Thread:` root id so it opens the whole discussion on lore.
 
    Importance dots map to the ranking above: 🔴 high = strong keyword hit
    **and** high reply count or notable maintainer; 🟡 medium = one strong
@@ -148,6 +164,7 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
 
 ## Notes
 
-- The CLI only walks the **latest local epoch**. For longer windows (>1
-  quarter) some history may be missing — flag that to the user if `count`
-  looks too small for the window.
+- The CLI walks **every epoch the window touches** and clones older epochs on
+  demand, so a wide window is slow (each lkml epoch is a few hundred MB) but
+  complete. If the CLI prints a `warning:` that the earliest epoch starts after
+  the window, that tail is off lore — tell the user.
