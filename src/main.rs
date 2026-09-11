@@ -212,14 +212,11 @@ fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> R
                 if i > 0 {
                     writeln!(out, "\n========\n")?;
                 }
-                let mut text = m.render_full();
-                if args.no_diff {
-                    // Quoted diffs in replies start with "> " and don't match.
-                    if let Some(at) = text.find("\ndiff --git ") {
-                        text.truncate(at + 1);
-                        text.push_str("[diff omitted by --no-diff]\n");
-                    }
-                }
+                let text = if args.no_diff {
+                    m.render_without_diff()
+                } else {
+                    m.render_full()
+                };
                 out.write_all(text.as_bytes())?;
             }
         }

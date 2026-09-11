@@ -109,7 +109,7 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    (Use `--select-msgid <id1>,<id2>,…` instead when picking by `Message-ID:`.)
 
    Prints `========`-separated blocks (headers, blank line, `--`, decoded body;
-   `[diff omitted by --no-diff]` where hunks were cut).
+   `[diff omitted]` where hunks were cut).
 
 6. **Summarize** by bucket with the language template below. Headings and prose
    in the chosen language; technical identifiers (functions, hashes, subjects,
