@@ -9,8 +9,9 @@ use chrono::{Duration, Utc};
 use clap::{Parser, ValueEnum};
 
 use lkml_core::archive;
-use lkml_core::filter::{DateFilter, DateRange, Filter, MsgidFilter, NameFilter};
+use lkml_core::filter::DateRange;
 use lkml_core::mail::{self, Mail};
+use lkml_core::parse::normalize_message_id;
 use lkml_core::thread;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
@@ -107,16 +108,17 @@ fn parse_since(s: &str) -> Result<Duration> {
     }
 }
 
-fn resolve_filter(args: &Args) -> Result<DateFilter> {
-    let mut filter = DateFilter::new();
-    if let Some(text) = &args.range {
-        filter.set(text)?;
-    } else {
-        let end = Utc::now();
-        let start = end - parse_since(&args.since)?;
-        filter.date_range = Some(DateRange { start, end });
+fn resolve_range(args: &Args) -> Result<DateRange> {
+    match &args.range {
+        Some(text) => DateRange::parse(text),
+        None => {
+            let end = Utc::now();
+            Ok(DateRange {
+                start: end - parse_since(&args.since)?,
+                end,
+            })
+        }
     }
-    Ok(filter)
 }
 
 /// Drop later mails that repeat an already-seen commit id. Commit ids are
@@ -272,19 +274,19 @@ fn select_by_msgid(
     list: &str,
     epochs: &[u32],
     range: &DateRange,
-    date: &DateFilter,
     msgids: &[String],
 ) -> Result<Vec<Mail>> {
     if msgids.is_empty() {
         return Ok(Vec::new());
     }
-    let filters: Vec<MsgidFilter> = msgids.iter().map(|m| MsgidFilter::new(m)).collect();
+    let wanted: Vec<String> = msgids.iter().map(|m| normalize_message_id(m)).collect();
+    let id_of = |m: &Mail| normalize_message_id(&m.message_id);
     let mails: Vec<Mail> = read_window(list, epochs, range)?
         .into_iter()
-        .filter(|m| date.matches(m) && filters.iter().any(|f| f.matches(m)))
+        .filter(|m| range.contains(m) && wanted.contains(&id_of(m)))
         .collect();
-    for (sel, filter) in msgids.iter().zip(&filters) {
-        if !mails.iter().any(|m| filter.matches(m)) {
+    for (sel, id) in msgids.iter().zip(&wanted) {
+        if !mails.iter().any(|m| id_of(m) == *id) {
             eprintln!("warning: message-id {sel}: not found in local mirror window");
         }
     }
@@ -295,11 +297,7 @@ fn run() -> Result<()> {
     let args = Args::parse();
 
     // Resolve the window first (no network) so we know how far back to mirror.
-    let filter = resolve_filter(&args)?;
-    let range = filter
-        .date_range
-        .clone()
-        .ok_or_else(|| anyhow!("no date range resolved"))?;
+    let range = resolve_range(&args)?;
     let window = window_utc(&range);
 
     eprintln!("Updating mirror for '{}'…", args.list);
@@ -333,17 +331,17 @@ fn run() -> Result<()> {
     let mut mails: Vec<Mail> = if !any_selected {
         // No selection: list the whole window across every spanned epoch and
         // keep the in-window mails.
-        let excludes: Vec<NameFilter> = clean_selects(&args.exclude_from)
+        let excludes: Vec<String> = clean_selects(&args.exclude_from)
             .iter()
-            .map(|s| {
-                let mut f = NameFilter::author();
-                f.set(s);
-                f
-            })
+            .map(|s| s.to_lowercase())
             .collect();
         read_window(&args.list, &epochs, &range)?
             .into_iter()
-            .filter(|m| filter.matches(m) && !excludes.iter().any(|x| x.matches(m)))
+            .filter(|m| range.contains(m))
+            .filter(|m| {
+                let from = m.from.to_lowercase();
+                !excludes.iter().any(|x| from.contains(x.as_str()))
+            })
             .collect()
     } else {
         // Selection: build a mail vector from each source, concatenate, dedup.
@@ -353,14 +351,14 @@ fn run() -> Result<()> {
         for commit in &commit_selects {
             match fetch_commit_any(&args.list, &epochs, commit) {
                 Ok(mail) => {
-                    if filter.matches(&mail) {
+                    if range.contains(&mail) {
                         from_commits.push(mail);
                     }
                 }
                 Err(e) => eprintln!("warning: commit {commit}: {e:#}"),
             }
         }
-        let from_msgids = select_by_msgid(&args.list, &epochs, &range, &filter, &msgid_selects)?;
+        let from_msgids = select_by_msgid(&args.list, &epochs, &range, &msgid_selects)?;
         let mut mails: Vec<Mail> = from_commits.into_iter().chain(from_msgids).collect();
         dedup_mails(&mut mails);
         mails
