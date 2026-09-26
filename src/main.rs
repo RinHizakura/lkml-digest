@@ -205,6 +205,13 @@ fn window_utc(range: &DateRange) -> String {
     )
 }
 
+/// `Series: v2 3/12` from the subject's `[PATCH v2 3/12]` tag; `None` for
+/// non-patch mail.
+fn series_line(m: &Mail) -> Option<String> {
+    m.patch_tag
+        .map(|t| format!("v{} {}/{}", t.version, t.number, t.total))
+}
+
 fn date_utc(m: &Mail) -> String {
     match m.date {
         Some(d) => format!("{} UTC", d.with_timezone(&Utc).format("%Y/%m/%d %H:%M")),
@@ -298,6 +305,9 @@ fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> R
                 }
                 writeln!(out, "Date: {}", date_utc(m))?;
                 writeln!(out, "Replies: {}", replies[i])?;
+                if let Some(series) = series_line(m) {
+                    writeln!(out, "Series: {series}")?;
+                }
                 writeln!(out, "Message-ID: {}", m.message_id)?;
                 writeln!(out, "Thread: <{}>", thread::thread_root(m))?;
                 writeln!(out, "Commit: {}", m.commit)?;
