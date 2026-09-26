@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::process::ExitCode;
 
@@ -22,6 +22,10 @@ enum Format {
     /// reply count, Message-ID, commit). Bodies are omitted so a reader can
     /// cheaply scan and pick which mails to fetch in full.
     Compact,
+    /// One record per thread: the head mail's metadata plus the in-window mail
+    /// count, participants, highest series revision and every member commit.
+    /// Several times smaller than `compact` on a busy list.
+    Threads,
 }
 
 #[derive(Parser, Debug)]
@@ -59,7 +63,7 @@ struct Args {
         long,
         value_enum,
         default_value_t = Format::Full,
-        help = "Output format: 'full' mail bodies, or 'compact' metadata for filtering."
+        help = "Output format: 'full' mail bodies, 'compact' metadata per mail, or 'threads' one record per thread."
     )]
     format: Format,
 
@@ -201,12 +205,74 @@ fn window_utc(range: &DateRange) -> String {
     )
 }
 
+fn date_utc(m: &Mail) -> String {
+    match m.date {
+        Some(d) => format!("{} UTC", d.with_timezone(&Utc).format("%Y/%m/%d %H:%M")),
+        None => "-".to_string(),
+    }
+}
+
+/// Group `mails` (date-sorted) by thread root, in order of each thread's
+/// oldest in-window mail, which heads its group.
+fn group_threads(mails: &[Mail]) -> Vec<Vec<usize>> {
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (i, m) in mails.iter().enumerate() {
+        match index.get(&thread::thread_root(m)) {
+            Some(&g) => groups[g].push(i),
+            None => {
+                index.insert(thread::thread_root(m), groups.len());
+                groups.push(vec![i]);
+            }
+        }
+    }
+    groups
+}
+
+fn write_thread(out: &mut impl Write, mails: &[Mail], members: &[usize]) -> Result<()> {
+    let head = &mails[members[0]];
+    let last = &mails[*members.last().unwrap()];
+    let mut participants: Vec<&str> = Vec::new();
+    for &i in members {
+        let a = mails[i].author.as_str();
+        if !a.is_empty() && !participants.contains(&a) {
+            participants.push(a);
+        }
+    }
+    let series = members
+        .iter()
+        .filter_map(|&i| mails[i].patch_tag)
+        .max_by_key(|t| t.version);
+    writeln!(out, "Subject: {}", head.subject)?;
+    writeln!(out, "From: {}", head.from)?;
+    writeln!(out, "Date: {}", date_utc(head))?;
+    writeln!(out, "Latest: {}", date_utc(last))?;
+    writeln!(out, "Mails: {}", members.len())?;
+    writeln!(out, "Participants: {}", participants.join(", "))?;
+    if let Some(t) = series {
+        writeln!(out, "Series: v{} {} patches", t.version, t.total)?;
+    }
+    writeln!(out, "Message-ID: {}", head.message_id)?;
+    writeln!(out, "Thread: <{}>", thread::thread_root(head))?;
+    let commits: Vec<&str> = members.iter().map(|&i| mails[i].commit.as_str()).collect();
+    writeln!(out, "Commits: {}", commits.join(","))?;
+    Ok(())
+}
+
 fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> Result<()> {
     let replies = thread::reply_counts(&mails);
     let mut out = std::io::stdout().lock();
     writeln!(out, "{}", header_line(args, epochs, window, mails.len()))?;
     writeln!(out)?;
     match args.format {
+        Format::Threads => {
+            for (i, members) in group_threads(&mails).iter().enumerate() {
+                if i > 0 {
+                    writeln!(out)?;
+                }
+                write_thread(&mut out, &mails, members)?;
+            }
+        }
         Format::Full => {
             for (i, m) in mails.iter().enumerate() {
                 if i > 0 {
@@ -230,14 +296,7 @@ fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> R
                 if !m.to.is_empty() {
                     writeln!(out, "To: {}", m.to)?;
                 }
-                match m.date {
-                    Some(d) => writeln!(
-                        out,
-                        "Date: {} UTC",
-                        d.with_timezone(&Utc).format("%Y/%m/%d %H:%M")
-                    )?,
-                    None => writeln!(out, "Date: -")?,
-                }
+                writeln!(out, "Date: {}", date_utc(m))?;
                 writeln!(out, "Replies: {}", replies[i])?;
                 writeln!(out, "Message-ID: {}", m.message_id)?;
                 writeln!(out, "Thread: <{}>", thread::thread_root(m))?;
@@ -375,5 +434,29 @@ fn main() -> ExitCode {
             eprintln!("error: {e:#}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mail(id: &str, root: Option<&str>) -> Mail {
+        Mail {
+            message_id: format!("<{id}>"),
+            references: root.map(|r| vec![format!("<{r}>")]).unwrap_or_default(),
+            ..Mail::default()
+        }
+    }
+
+    #[test]
+    fn threads_group_by_root_in_first_seen_order() {
+        let mails = vec![
+            mail("b1", Some("b")), // root b is outside the window: b1 heads it
+            mail("a", None),
+            mail("a1", Some("a")),
+            mail("b2", Some("b")),
+        ];
+        assert_eq!(group_threads(&mails), vec![vec![0, 3], vec![1, 2]]);
     }
 }

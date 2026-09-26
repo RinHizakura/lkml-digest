@@ -33,7 +33,9 @@ lkml-digest [OPTIONS]
       --range <RANGE>    Explicit range (overrides --since):
                          'today' | 'yesterday' | 'YYYY/MM/DD HH:MM to YYYY/MM/DD HH:MM'
       --limit <LIMIT>    Cap matching mails (0 = no cap, default: 0)
-      --format <FORMAT>  'full' (mail bodies, default) or 'compact' (metadata only)
+      --format <FORMAT>  'full' (mail bodies, default), 'compact' (metadata per mail)
+                         or 'threads' (one record per thread: head, mail count,
+                         participants, series revision, member commits)
       --no-diff          In 'full' output, cut each body at its first 'diff --git' line
       --exclude-from <SUBSTRS>
                          Drop window mails whose From contains any of these
@@ -46,7 +48,7 @@ lkml-digest [OPTIONS]
 
 ## Output format
 
-Both formats start with the same one-line header
+All formats start with the same one-line header
 (`# lkml-digest list=… epoch=… window=… count=N`); only the per-mail body
 differs. `epoch=` lists every epoch the window spanned, newest first
 (e.g. `epoch=19,18` when the window reached back into the previous epoch). The format is intentionally LLM-friendly: stable separators, headers
@@ -99,12 +101,34 @@ Commit: …
 Subject: …
 ```
 
+
 `Thread:` is the root Message-ID of the thread the mail belongs to (its own
 `Message-ID` when it is the root), so grouping records by it rebuilds threads.
 
 `Replies:` is the number of mails in the window that reply to this one
 transitively (its thread-subtree size minus itself), so a cover letter / thread
 root reflects how hot the discussion is.
+
+### `--format threads`
+
+One record per thread, headed by the thread's oldest in-window mail, so a
+scan of a busy list is several times smaller than `compact`. `Mails:` is the
+in-window count, `Participants:` the distinct authors in first-seen order,
+`Series:` the highest revision seen (patch threads only), and `Commits:` every
+member's commit id oldest first — ready to feed to `--select-commit`:
+
+```
+Subject: …
+From: …
+Date: …
+Latest: …
+Mails: 7
+Participants: A, B, C
+Series: v3 12 patches
+Message-ID: …
+Thread: …
+Commits: …,…,…
+```
 
 ### Selecting specific mails
 
