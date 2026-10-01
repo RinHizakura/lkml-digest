@@ -158,9 +158,6 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
      subsystem · state tag · mail count · **one or two sentences** that give
      the gist (what it is, where it stands). The full card (original subject,
      lore link, bullets) sits inside, collapsed by default.
-   - **Progress is a nested bullet list**, not prose: 2–6 bullets, one fact
-     each, bold lead word (`<b>Fix</b>:`, `<b>Reviewer</b>:`, `<b>Numbers</b>:`,
-     `<b>State</b>:`), under ~20 words per bullet. Skim-first.
    - Titles are **plain-language rewrites** (what it does, not the tag
      soup); the original subject goes on the first line inside. HTML-escape
      `<` `>` `&` in subjects and Message-IDs (`&lt;id@host&gt;`).
@@ -204,11 +201,8 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    <ul>
    <li><b>Importance</b>: 🔴 High / 🟡 Medium / 🟢 Low · <b>State</b>: <tag></li>
    <li><b>Topic</b>: 1–2 sentences on what's being discussed.</li>
-   <li><b>Progress</b>: <ul>
-     <li><b>Lead word</b>: one fact per bullet, short, scannable</li>
-     <li><b>Reviewer</b>: what they said / asked for</li>
-     <li><b>State</b>: what happens next</li>
-   </ul></li>
+   <li><b>Progress</b>: point of contention, or conclusion — clear, complete
+       sentences a reader outside the thread can follow.</li>
    <li><b>Key participants</b>: A, B, C</li>
    <li><b>Deep dive</b>: <code>/lkml-summary &lt;head Message-ID&gt; <lang> <list></code></li>
    </ul>
