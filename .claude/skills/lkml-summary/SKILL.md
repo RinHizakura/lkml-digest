@@ -121,73 +121,78 @@ Decode/clean as you read:
 - Note `From:`, `Date:`, `Subject:` (version + `M/N`), and the diffstat/changed
   files if a patch is inline.
 
-## Output: a technical article
+## Output: a technical article as HTML
 
-Write flowing prose, not a bullet dump. Headings and narration in the chosen
-language; **all technical identifiers verbatim** (function names, struct
-fields, config symbols like `ANON_VMA_LAZY`, commit hashes, subjects, file
-paths, maintainer names, numbers/units). Lead with a one-line orientation, then
-the four-part arc. Use a diagram **only when it earns its place** — a before/
-after data-structure change, a control-flow/lock ordering, a state machine, or a
-benchmark table. Prefer a Markdown table for numbers and a fenced ASCII/mermaid
-block for structure; skip diagrams for a purely textual discussion.
+Write one self-contained HTML file to `out/summary-<msgid>-<lang>.html`
+(create `out/` if missing; `<msgid>` = the id without angle brackets, any
+character outside `[A-Za-z0-9._-]` replaced by `_`). Flowing prose, not a
+bullet dump. Headings and narration in the chosen language; **all technical
+identifiers verbatim** (function names, struct fields, config symbols like
+`ANON_VMA_LAZY`, commit hashes, subjects, file paths, maintainer names,
+numbers/units). HTML-escape `<` `>` `&` in subjects, Message-IDs and code.
+Lead with a one-line orientation, then the four-part arc. Use a diagram
+**only when it earns its place** — a before/after data-structure change, a
+control-flow/lock ordering, a state machine, or a benchmark table. Numbers go
+in a `<table>`, structure in a `<pre>` ASCII block; skip diagrams for a purely
+textual discussion.
 
-Template — English (`en`):
+```html
+<!doctype html>
+<html lang="en">                       <!-- zh: lang="zh-Hant" -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><plain-language title></title>
+<style>
+body{font:16px/1.6 system-ui,sans-serif;max-width:50rem;margin:2rem auto;padding:0 1rem;color:#222;background:#fff}
+table{border-collapse:collapse}th,td{border:1px solid #ccc;padding:.3rem .6rem;text-align:left}
+code,pre{background:#f3f3f3}code{padding:.1em .3em}pre{padding:.8rem;overflow-x:auto}
+blockquote{color:#555;border-left:3px solid #ccc;margin:0;padding-left:1rem}
+@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}code,pre{background:#222}th,td{border-color:#444}}
+</style>
+</head>
+<body>
+<h1><plain-language title> — <code><original Subject></code></h1>
+<blockquote>Message-ID: <code>&lt;msgid&gt;</code> · From: <author> · <date> · list: <list><br>
+Role: <cover letter | PATCH n/N | review reply | RFC> · Thread: <N> mails</blockquote>
 
-```
-# <plain-language title> — `<original Subject>`
+<p><b>TL;DR.</b> 2–3 sentences: what this changes and why it matters.</p>
 
-> Message-ID: `<msgid>` · From: <author> · <date> · list: <list>
-> Role: <cover letter | PATCH n/N | review reply | RFC> · Thread: <N> mails
-
-**TL;DR.** 2–3 sentences: what this changes and why it matters.
-
-## The problem
-What was broken / slow / missing before this. Ground it in the kernel
+<h2>The problem</h2>
+<p>What was broken / slow / missing before this. Ground it in the kernel
 mechanism involved (the subsystem, the data structure, the hot path). If the
-thread debated *whether* it's a problem, say so.
+thread debated <em>whether</em> it's a problem, say so.</p>
 
-## The approach
-How the patch/series solves it. Walk the key change; name the functions,
-flags, and structures touched. Diagram the before→after if structural.
+<h2>The approach</h2>
+<p>How the patch/series solves it. Walk the key change; name the functions,
+flags, and structures touched. Diagram the before→after in a <pre> if structural.</p>
 
-## Results
-What the cover letter / replies measured — workload, machine, numbers, deltas.
-Put figures in a table. If there are no measurements, say "no benchmarks
-posted" rather than inventing any.
+<h2>Results</h2>
+<p>What the cover letter / replies measured — workload, machine, numbers,
+deltas, in a <table>. If there are no measurements, say "no benchmarks
+posted" rather than inventing any.</p>
 
-## Takeaways
-Status (merged / under review / NAK'd / RFC), the main point of contention,
-and what to watch next. 2–4 sentences.
+<h2>Takeaways</h2>
+<p>Status (merged / under review / NAK'd / RFC), the main point of contention,
+and what to watch next. 2–4 sentences.</p>
+</body>
+</html>
 ```
 
-Template — Traditional Chinese (`zh`):
+Traditional Chinese (`zh`): same skeleton with `lang="zh-Hant"` and these
+labels:
 
-```
-# <白話標題> — `<原始 Subject>`
+| en | zh |
+|---|---|
+| Message-ID: · From: · list: | Message-ID： · 作者： · list： |
+| Role: · Thread: N mails | 性質： · 討論串：N 封 |
+| TL;DR. | 一句話總結。 |
+| The problem | 原始問題 |
+| The approach | 解決方法 |
+| Results · "no benchmarks posted" | 實驗結果 · 「未附 benchmark」 |
+| Takeaways | 小結 |
 
-> Message-ID：`<msgid>` · 作者：<author> · <date> · list：<list>
-> 性質：<cover letter | PATCH n/N | review 回覆 | RFC> · 討論串：<N> 封
-
-**一句話總結。** 兩三句：這個改動做了什麼、為什麼重要。
-
-## 原始問題
-在這個 patch 之前，哪裡壞了／慢了／少了什麼。扣著牽涉到的核心機制
-（子系統、資料結構、hot path）來談。若討論串在爭論「這到底算不算問題」，
-也要點出來。
-
-## 解決方法
-patch／patch series 怎麼解這個問題。逐步說明關鍵改動，點名被動到的
-函式、flag、結構。若是結構性改動，用圖示對照 before→after。
-
-## 實驗結果
-cover letter／回覆裡量到的數據——測試負載、機器、數字、差異。
-數據用表格呈現。若沒有任何量測，就寫「未附 benchmark」，不要自己編。
-
-## 小結
-狀態（已 merge／review 中／被 NAK／RFC）、主要爭議點、後續值得關注的方向。
-兩到四句。
-```
+Finish by replying with the file path and the TL;DR — not the HTML itself.
 
 ## Notes & failure modes
 

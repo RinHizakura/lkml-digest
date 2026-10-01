@@ -106,11 +106,9 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    a board DT patch; a `usb:` core fix over SoC phy glue). Skip a bucket only if
    truly empty — note the omission.
 
-   **Regressions first.** Separately collect every thread whose subject or
-   head matches `regression`, `revert`, `bisect`, `KASAN`, `BUG:`, `WARNING:`,
-   `Fixes:`, `stable@` — from a human, not a bot. These go into their own
-   section regardless of bucket; a regression report is the story even when
-   `Mails:` is 0.
+   Threads whose subject or head matches `regression`, `revert`, `bisect`,
+   `KASAN`, `BUG:`, `WARNING:`, `Fixes:`, `stable@` — from a human, not a
+   bot — always make the cut for their bucket, even when `Mails:` is 0.
 
 5. **Phase 2 — fetch picks in full.** Per thread, take the `Commits:` list and
    keep the head (cover letter `0/N` or root) plus the replies you want — skip
@@ -146,86 +144,104 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
    Never infer "merged" from the absence of objections. If you didn't see the
    merge signal in the window, it's 💬 or 💤.
 
-7. **Summarize** with the language template below. Headings and prose in the
-   chosen language; technical identifiers (functions, hashes, subjects,
-   maintainer names) verbatim. The **index table comes first** and lists every
-   entry that has a card below, one row each, in card order. Titles are
-   **plain-language rewrites** (what it does, not the tag soup); the original
-   subject goes on the line under the heading.
+7. **Summarize** into one self-contained HTML file and write it to
+   `out/digest-<list>-<YYYY-MM-DD>-<lang>.html` (create `out/` if missing).
+   Headings and prose in the chosen language; technical identifiers
+   (functions, hashes, subjects, maintainer names) verbatim. Layout:
 
-   English (`en`):
+   - **One tab per bucket**, switched by the sticky `<nav>` at the top. Tabs
+     are `<section id="sN">` inside `<main>`, shown via `:target` (pure CSS,
+     no JS), one per bucket in the order from step 4. Skip a tab only if its
+     bucket is truly empty.
+   - **One `<details>` per thread.** The always-visible `<summary>` carries
+     the plain-language title, then a `<small>` line: importance dot ·
+     subsystem · state tag · mail count · **one or two sentences** that give
+     the gist (what it is, where it stands). The full card (original subject,
+     lore link, bullets) sits inside, collapsed by default.
+   - **Progress is a nested bullet list**, not prose: 2–6 bullets, one fact
+     each, bold lead word (`<b>Fix</b>:`, `<b>Reviewer</b>:`, `<b>Numbers</b>:`,
+     `<b>State</b>:`), under ~20 words per bullet. Skim-first.
+   - Titles are **plain-language rewrites** (what it does, not the tag
+     soup); the original subject goes on the first line inside. HTML-escape
+     `<` `>` `&` in subjects and Message-IDs (`&lt;id@host&gt;`).
 
+   ```html
+   <!doctype html>
+   <html lang="en">                       <!-- zh: lang="zh-Hant" -->
+   <head>
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>LKML Daily Digest — <YYYY-MM-DD></title>
+   <style>
+   body{font:16px/1.6 system-ui,sans-serif;max-width:60rem;margin:2rem auto;padding:0 1rem;color:#222;background:#fff}
+   code{background:#f3f3f3;padding:.1em .3em}blockquote{color:#555;border-left:3px solid #ccc;margin:0;padding-left:1rem}
+   nav{display:flex;flex-wrap:wrap;gap:.4rem;position:sticky;top:0;background:#fff;padding:.5rem 0;border-bottom:1px solid #ddd;margin-bottom:1rem}
+   nav a{text-decoration:none;color:inherit;border:1px solid #bbb;border-radius:.5rem;padding:.25rem .8rem;background:#f6f6f6}nav a:hover{background:#e6e6e6}
+   /* one selector per tab, s0..sN; the last line keeps the first tab lit when there is no hash */
+   body:has(#s0:target) nav a[href="#s0"],body:has(#s1:target) nav a[href="#s1"],
+   body:not(:has(main>section:target)) nav a[href="#s0"]{background:#222;color:#fff;border-color:#222}
+   main>section{display:none}main>section:target{display:block}main:not(:has(section:target))>section:first-child{display:block}
+   details{border-top:1px solid #ddd;padding:.6rem 0}summary{cursor:pointer;list-style:none}summary::before{content:"▸ ";opacity:.6}details[open]>summary::before{content:"▾ "}
+   summary small{color:#555;font-weight:400}
+   @media(prefers-color-scheme:dark){body{background:#111;color:#ddd}code{background:#222}nav{background:#111;border-color:#444}nav a{background:#1c1c1c;border-color:#555}nav a:hover{background:#2a2a2a}details{border-color:#444}summary small{color:#aaa}
+   body:has(#s0:target) nav a[href="#s0"],body:has(#s1:target) nav a[href="#s1"],body:not(:has(main>section:target)) nav a[href="#s0"]{background:#eee;color:#111;border-color:#eee}}
+   </style>
+   </head>
+   <body>
+   <h1>Linux Kernel Mailing List Daily Digest — <YYYY-MM-DD></h1>
+   <blockquote>Window: <start> — <end> UTC · list: <list> · <N> mails / <T> threads</blockquote>
+
+   <nav><a href="#s0">core</a><a href="#s1">mm</a> …</nav>
+   <main>
+
+   <section id="s0">
+   <h2><Subsystem></h2>
+
+   <details id="t1">
+   <summary><b><plain-language title></b><br><small>🔴 <subsystem> · <tag> · <N> mails — one or two sentences: what it is and where it stands.</small></summary>
+   <p><code><original English subject></code><br>
+   <a href="https://lore.kernel.org/<list>/<thread root Message-ID without brackets>/">https://lore.kernel.org/<list>/<root id>/</a></p>
+   <ul>
+   <li><b>Importance</b>: 🔴 High / 🟡 Medium / 🟢 Low · <b>State</b>: <tag></li>
+   <li><b>Topic</b>: 1–2 sentences on what's being discussed.</li>
+   <li><b>Progress</b>: <ul>
+     <li><b>Lead word</b>: one fact per bullet, short, scannable</li>
+     <li><b>Reviewer</b>: what they said / asked for</li>
+     <li><b>State</b>: what happens next</li>
+   </ul></li>
+   <li><b>Key participants</b>: A, B, C</li>
+   <li><b>Deep dive</b>: <code>/lkml-summary &lt;head Message-ID&gt; <lang> <list></code></li>
+   </ul>
+   </details>
+   </section>
+
+   </main>
+   </body>
+   </html>
    ```
-   # Linux Kernel Mailing List Daily Digest — <YYYY-MM-DD>
 
-   > Window: <start> — <end> UTC · list: <list> · <N> mails / <T> threads
+   Traditional Chinese (`zh`): same skeleton with `lang="zh-Hant"` and these
+   labels (state tags keep their English word):
 
-   ## At a glance
-
-   | | Subsystem | What | State | Mails |
-   |---|---|---|---|---|
-   | 🔴 | mm | <plain-language title> | ⚠️ regression | 14 |
-   | 🟡 | net | … | 🔁 v3 | 7 |
-
-   ## 🔴 Today's Highlights
-   3–5 sentences on the day's most notable discussions or technical trends.
-
-   ## ⚠️ Regressions & reverts
-   (cards as below; write "None reported in this window." if empty)
-
-   ## 📌 <Subsystem>
-
-   ### <plain-language title>
-   `<original English subject>`
-   <https://lore.kernel.org/<list>/<thread root Message-ID without brackets>/>
-   - **Importance**: 🔴 High / 🟡 Medium / 🟢 Low · **State**: <tag>
-   - **Topic**: 1–2 sentences on what's being discussed.
-   - **Progress**: point of contention, or conclusion.
-   - **Key participants**: A, B, C
-   - **Deep dive**: `/lkml-summary <head Message-ID> <lang> <list>`
-   ```
-
-   Traditional Chinese (`zh`):
-
-   ```
-   # Linux Kernel Mailing List 每日摘要 — <YYYY-MM-DD>
-
-   > 涵蓋時間：<起始> — <結束> UTC · 來源：<list> · <N> 封信 / <T> 個討論串
-
-   ## 一眼掃完
-
-   | | 子系統 | 內容 | 狀態 | 信數 |
-   |---|---|---|---|---|
-   | 🔴 | mm | <白話標題> | ⚠️ regression | 14 |
-   | 🟡 | net | … | 🔁 v3 | 7 |
-
-   ## 🔴 今日亮點
-   3–5 句話，說明當天最值得關注的討論或技術趨勢。
-
-   ## ⚠️ Regression 與 revert
-   （卡片格式同下；沒有就寫「本時段無回報。」）
-
-   ## 📌 <子系統 / List 名稱>
-
-   ### <白話標題>
-   `<英文 subject 原文>`
-   <https://lore.kernel.org/<list>/<thread root Message-ID without brackets>/>
-   - **重要性**：🔴 高 / 🟡 中 / 🟢 低 · **狀態**：<tag>
-   - **核心議題**：（1–2 句，說明在討論什麼問題）
-   - **進展**：（爭議點、或結論）
-   - **主要參與者**：A、B、C
-   - **深入閱讀**：`/lkml-summary <head Message-ID> <lang> <list>`
-   ```
+   | en | zh |
+   |---|---|
+   | Linux Kernel Mailing List Daily Digest — | Linux Kernel Mailing List 每日摘要 — |
+   | Window: … · list: … · N mails / T threads | 涵蓋時間：… · 來源：… · N 封信 / T 個討論串 |
+   | N mails (summary line) | N 封 |
+   | Importance: High / Medium / Low · State | 重要性：高 / 中 / 低 · 狀態 |
+   | Topic · Progress · Key participants · Deep dive | 核心議題 · 進展 · 主要參與者 · 深入閱讀 |
 
    Times are printed as the CLI gives them (UTC); don't convert. The link
    uses the `Thread:` root id so it opens the whole discussion on lore; the
-   deep-dive line uses the head `Message-ID:` (angle brackets included) so it
-   pastes straight into `lkml-summary`. State tags keep their English word
-   in both languages.
+   deep-dive line uses the head `Message-ID:` (angle brackets included, escaped)
+   so it pastes straight into `lkml-summary`.
 
    Importance dots map to the ranking above: 🔴 high = strong keyword hit
    **and** high mail count or notable maintainer; 🟡 medium = one strong
    signal; 🟢 low = included for breadth or because the user asked.
+
+8. **Reply** with the file path and one line per tab (`tab — N cards`) —
+   not the HTML itself.
 
 ## Notes
 

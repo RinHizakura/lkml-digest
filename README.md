@@ -22,6 +22,9 @@ make run-digest                      # defaults to LIST=lkml
 make run-digest LIST=linux-mm
 ```
 
+The `/lkml-digest` and `/lkml-summary` skills write their result as a
+self-contained HTML page under `out/` (git-ignored).
+
 ## CLI
 
 ```
