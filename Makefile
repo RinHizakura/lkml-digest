@@ -6,7 +6,7 @@ build:
 	cargo build --release
 
 run-digest: build
-	./target/release/lkml-digest --format compact -l $(LIST)
+	./target/release/lkml-digest --format threads -l $(LIST)
 
 run-digest-skill: build
 	claude -p "/lkml-digest zh $(LIST) 24h"

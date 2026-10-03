@@ -64,7 +64,7 @@ Don't pour every full mail body into context. Use the CLI's two-phase design:
        --exclude-from syzbot,lkp@intel.com
    ```
 
-   Output is a `# … count=N` header (N = mails, not threads), then
+   Output is a `# … count=N threads=T` header (N = mails, T = threads), then
    blank-line-separated records:
 
    ```

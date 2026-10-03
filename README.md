@@ -52,7 +52,7 @@ lkml-digest [OPTIONS]
 ## Output format
 
 All formats start with the same one-line header
-(`# lkml-digest list=… epoch=… window=… count=N`); only the per-mail body
+(`# lkml-digest list=… epoch=… window=… count=N threads=T`); only the per-mail body
 differs. `epoch=` lists every epoch the window spanned, newest first
 (e.g. `epoch=19,18` when the window reached back into the previous epoch). The format is intentionally LLM-friendly: stable separators, headers
 up front, no terminal escape codes. The `window=` range is shown in **UTC**, and
@@ -64,7 +64,7 @@ so is the `compact` `Date:` line, so the two line up directly.
 decoded body:
 
 ```
-# lkml-digest list=lkml epoch=20 window=2026/05/22 17:00 to 2026/05/23 17:00 count=347
+# lkml-digest list=lkml epoch=20 window=2026/05/22 17:00 to 2026/05/23 17:00 count=347 threads=112
 
 From: …
 Date: …
@@ -90,7 +90,7 @@ Message-ID, commit) with **no bodies**, separated by a blank line — so a reade
 can cheaply scan and pick which mails to fetch in full:
 
 ```
-# lkml-digest list=lkml epoch=20 window=2026/05/22 17:00 to 2026/05/23 17:00 count=347
+# lkml-digest list=lkml epoch=20 window=2026/05/22 17:00 to 2026/05/23 17:00 count=347 threads=112
 
 Subject: …
 From: …

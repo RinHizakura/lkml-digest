@@ -142,13 +142,14 @@ fn fmt_epochs(epochs: &[u32]) -> String {
         .join(",")
 }
 
-fn header_line(args: &Args, epochs: &[u32], window: &str, count: usize) -> String {
+fn header_line(args: &Args, epochs: &[u32], window: &str, count: usize, threads: usize) -> String {
     format!(
-        "# lkml-digest list={} epoch={} window={} count={}",
+        "# lkml-digest list={} epoch={} window={} count={} threads={}",
         args.list,
         fmt_epochs(epochs),
         window,
-        count
+        count,
+        threads
     )
 }
 
@@ -268,12 +269,13 @@ fn write_thread(out: &mut impl Write, mails: &[Mail], members: &[usize]) -> Resu
 
 fn write_mails(args: &Args, mails: Vec<Mail>, epochs: &[u32], window: &str) -> Result<()> {
     let replies = thread::reply_counts(&mails);
+    let threads = group_threads(&mails);
     let mut out = std::io::stdout().lock();
-    writeln!(out, "{}", header_line(args, epochs, window, mails.len()))?;
+    writeln!(out, "{}", header_line(args, epochs, window, mails.len(), threads.len()))?;
     writeln!(out)?;
     match args.format {
         Format::Threads => {
-            for (i, members) in group_threads(&mails).iter().enumerate() {
+            for (i, members) in threads.iter().enumerate() {
                 if i > 0 {
                     writeln!(out)?;
                 }
