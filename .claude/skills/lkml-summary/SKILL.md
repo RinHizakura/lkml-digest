@@ -1,6 +1,6 @@
 ---
 name: lkml-summary
-description: Explain a single lore.kernel.org mail (given its Message-ID) as a technical article — original problem → solution → experimental results → conclusion, with diagrams where they help. Use when the user passes an LKML / kernel mailing-list Message-ID (msgid) and wants a deep, readable write-up of that one mail or patch thread rather than a daily digest.
+description: Explain a single lore.kernel.org mail (given its Message-ID) as a technical article — original problem → solution → experimental results → conclusion, with inline-SVG architecture/flow diagrams where they help and reference links (lore, elixir, docs.kernel.org) for everything cited. Use when the user passes an LKML / kernel mailing-list Message-ID (msgid) and wants a deep, readable write-up of that one mail or patch thread rather than a daily digest.
 ---
 
 # lkml-summary — explain one LKML mail as a technical article
@@ -130,11 +130,45 @@ bullet dump. Headings and narration in the chosen language; **all technical
 identifiers verbatim** (function names, struct fields, config symbols like
 `ANON_VMA_LAZY`, commit hashes, subjects, file paths, maintainer names,
 numbers/units). HTML-escape `<` `>` `&` in subjects, Message-IDs and code.
-Lead with a one-line orientation, then the four-part arc. Use a diagram
-**only when it earns its place** — a before/after data-structure change, a
-control-flow/lock ordering, a state machine, or a benchmark table. Numbers go
-in a `<table>`, structure in a `<pre>` ASCII block; skip diagrams for a purely
-textual discussion.
+Lead with a one-line orientation, then the four-part arc, then a
+**References** list.
+
+**Diagrams.** Numbers go in a `<table>`. Structure gets a picture when it
+earns its place — and for a patch that moves a data structure, changes a
+control-flow / lock ordering, or inserts itself somewhere in a stack, it
+usually does. Draw it as **inline SVG** inside a `<figure>` with a
+`<figcaption>`:
+- **architecture diagram** — which layer / subsystem the change sits in and
+  what it talks to (e.g. syscall → VFS → fs → block), with the changed box
+  highlighted;
+- **flow diagram** — before → after call sequence, state machine, or lock
+  ordering; two side-by-side columns labelled *before* / *after* when the
+  point is a delta.
+
+Keep the file self-contained: no `<img src=…>`, no external image files, no
+CDN scripts (no Mermaid). Keep the SVG simple — `<rect>` boxes, `<line>` /
+`<path>` arrows with a `marker-end`, labels as `<text>` (searchable) in
+monospace — and use `fill="none" stroke="currentColor"` so it reads in dark
+mode. A `<pre>` ASCII block is still fine for a small struct layout. One or two
+figures per article, placed next to the paragraph they illustrate; skip
+diagrams for a purely textual discussion.
+
+**Links.** Hyperlink what a reader might want to chase, but only URLs you can
+construct deterministically or copied verbatim from the thread — never guess:
+- the mail itself and every thread mail you cite (cover letter, a review
+  reply): `https://lore.kernel.org/<list>/<msgid without brackets>/`
+  (`lkml` → `https://lore.kernel.org/lkml/…`; `all` works for any list);
+- kernel source files / functions named in the article:
+  `https://elixir.bootlin.com/linux/latest/source/<path>` (add `#L<n>` only
+  if the line is known from the diff);
+- in-tree docs: `Documentation/<x>/<y>.rst` → `https://docs.kernel.org/<x>/<y>.html`;
+- commit hashes quoted in the thread (12+ hex chars):
+  `https://git.kernel.org/torvalds/c/<hash>`;
+- URLs pasted in the mail body (LWN, bugzilla, git.kernel.org) — copy as-is.
+
+Link inline at first mention (`<a href="…"><code>mm/rmap.c</code></a>`) and
+collect them again under **References**. Don't link generic terms, and don't
+link an LWN article or blog post you merely *think* exists.
 
 ```html
 <!doctype html>
@@ -148,12 +182,14 @@ body{font:16px/1.6 system-ui,sans-serif;max-width:50rem;margin:2rem auto;padding
 table{border-collapse:collapse}th,td{border:1px solid #ccc;padding:.3rem .6rem;text-align:left}
 code,pre{background:#f3f3f3}code{padding:.1em .3em}pre{padding:.8rem;overflow-x:auto}
 blockquote{color:#555;border-left:3px solid #ccc;margin:0;padding-left:1rem}
-@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}code,pre{background:#222}th,td{border-color:#444}}
+figure{margin:1.5rem 0}figure svg{max-width:100%;height:auto;font:13px monospace}figcaption{font-size:.9em;color:#555}
+a{color:#0645ad}
+@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}code,pre{background:#222}th,td{border-color:#444}a{color:#8ab4f8}figcaption{color:#aaa}}
 </style>
 </head>
 <body>
 <h1><plain-language title> — <code><original Subject></code></h1>
-<blockquote>Message-ID: <code>&lt;msgid&gt;</code> · From: <author> · <date> · list: <list><br>
+<blockquote>Message-ID: <a href="https://lore.kernel.org/<list>/<msgid>/"><code>&lt;msgid&gt;</code></a> · From: <author> · <date> · list: <list><br>
 Role: <cover letter | PATCH n/N | review reply | RFC> · Thread: <N> mails</blockquote>
 
 <p><b>TL;DR.</b> 2–3 sentences: what this changes and why it matters.</p>
@@ -165,7 +201,23 @@ thread debated <em>whether</em> it's a problem, say so.</p>
 
 <h2>The approach</h2>
 <p>How the patch/series solves it. Walk the key change; name the functions,
-flags, and structures touched. Diagram the before→after in a <pre> if structural.</p>
+flags, and structures touched, each linked at first mention
+(<a href="https://elixir.bootlin.com/linux/latest/source/mm/rmap.c"><code>mm/rmap.c</code></a>).</p>
+<figure>
+<svg viewBox="0 0 520 160" role="img" aria-label="before/after flow">
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g fill="none" stroke="currentColor">
+    <rect x="10" y="20" width="120" height="36" rx="4"/>
+    <rect x="200" y="20" width="120" height="36" rx="4"/>
+    <line x1="130" y1="38" x2="198" y2="38" marker-end="url(#arr)"/>
+  </g>
+  <g fill="currentColor" text-anchor="middle">
+    <text x="70" y="43">caller()</text><text x="260" y="43">new_helper()</text>
+  </g>
+</svg>
+<figcaption>Figure 1 — call flow after the patch (before: … ).</figcaption>
+</figure>
 
 <h2>Results</h2>
 <p>What the cover letter / replies measured — workload, machine, numbers,
@@ -175,6 +227,13 @@ posted" rather than inventing any.</p>
 <h2>Takeaways</h2>
 <p>Status (merged / under review / NAK'd / RFC), the main point of contention,
 and what to watch next. 2–4 sentences.</p>
+
+<h2>References</h2>
+<ul>
+<li><a href="https://lore.kernel.org/<list>/<msgid>/">this mail</a> · <a href="https://lore.kernel.org/<list>/<cover msgid>/">cover letter</a> · <a href="…">decisive review reply</a></li>
+<li>source: <a href="https://elixir.bootlin.com/linux/latest/source/<path>"><code><path></code></a>, …</li>
+<li>docs / commits / external URLs quoted in the thread</li>
+</ul>
 </body>
 </html>
 ```
@@ -191,6 +250,8 @@ labels:
 | The approach | 解決方法 |
 | Results · "no benchmarks posted" | 實驗結果 · 「未附 benchmark」 |
 | Takeaways | 小結 |
+| References · this mail · cover letter | 參考資料 · 本信 · cover letter |
+| Figure 1 — … | 圖 1 — … |
 
 Finish by replying with the file path and the TL;DR — not the HTML itself.
 
