@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(cargo build --release)",
       "Bash(./target/release/lkml-digest *)"
     ]
   }
