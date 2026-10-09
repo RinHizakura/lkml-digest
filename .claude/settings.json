@@ -4,7 +4,7 @@
       "Bash(cargo build --release)",
       "Bash(./target/release/lkml-digest *)",
       "Bash(mkdir -p out)",
-      "Write(out/**)"
+      "Edit(out/**)"
     ]
   }
 }
